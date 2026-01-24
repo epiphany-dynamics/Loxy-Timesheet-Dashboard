@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
-import { getEmployees, toggleEmployeeStatus, addEmployee, fetchSubmissions } from '../actions';
+import { getEmployees, deleteEmployee, addEmployee, fetchSubmissions } from '../actions';
 import { User, FileText, Check, X, Plus, Loader2, LogOut } from 'lucide-react';
 
 type Employee = {
@@ -23,6 +23,7 @@ export default function AdminPage() {
     const [empLoading, setEmpLoading] = useState(true);
     const [feedLoading, setFeedLoading] = useState(true);
     const [newEmployeeName, setNewEmployeeName] = useState('');
+    const [selectedDeleteId, setSelectedDeleteId] = useState('');
     const [reportMessage, setReportMessage] = useState('');
 
     // Default Range: Last 30 Days
@@ -85,14 +86,21 @@ export default function AdminPage() {
         }
     };
 
-    const handleToggleStatus = async (id: string, currentStatus: boolean) => {
-        // Optimistic update
-        setEmployees(prev => prev.map(e => e.id === id ? { ...e, is_active: !currentStatus } : e));
+    const handleDeleteEmployee = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedDeleteId) return;
+
+        const emp = employees.find(e => e.id === selectedDeleteId);
+        if (!emp) return;
+
+        if (!confirm(`Are you sure you want to permanently remove ${emp.name}?`)) return;
+
         try {
-            await toggleEmployeeStatus(id, !currentStatus);
-        } catch (e: unknown) {
-            alert('Failed to update status');
+            await deleteEmployee(selectedDeleteId);
+            setSelectedDeleteId('');
             loadEmployees();
+        } catch (e: unknown) {
+            alert('Failed to delete employee');
         }
     };
 
@@ -312,15 +320,15 @@ export default function AdminPage() {
                         Employee Manager
                     </h2>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* Left: Add New */}
+                    <div className="grid grid-cols-1 gap-8 max-w-xl">
+                        {/* Add New */}
                         <div className="space-y-3">
                             <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Add New Employee</label>
                             <form onSubmit={handleAddEmployee} className="flex gap-2">
                                 <input
                                     type="text"
                                     placeholder="Employee Name..."
-                                    className="flex-1 border border-gray-300 rounded-lg p-3 focus:border-brand-blue outline-none"
+                                    className="flex-1 border border-gray-300 rounded-lg p-3 outline-none focus:border-brand-blue focus:ring-0"
                                     value={newEmployeeName}
                                     onChange={e => setNewEmployeeName(e.target.value)}
                                 />
@@ -333,23 +341,28 @@ export default function AdminPage() {
                             </form>
                         </div>
 
-                        {/* Right: Manage List */}
+                        {/* Remove Employee */}
                         <div className="space-y-3">
-                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Active Status ({employees.length})</label>
-                            <div className="bg-gray-50 rounded-lg border border-gray-200 p-2 max-h-32 overflow-y-auto space-y-1">
-                                {empLoading ? <div className="text-center p-2 text-sm text-gray-400">Loading...</div> : employees.map(emp => (
-                                    <div key={emp.id} className="flex items-center justify-between p-2 bg-white rounded border border-gray-100 text-sm">
-                                        <span className={`truncate ${emp.is_active ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{emp.name}</span>
-                                        <button
-                                            onClick={() => handleToggleStatus(emp.id, emp.is_active)}
-                                            className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded transition-colors ${emp.is_active ? 'text-brand-blue hover:bg-blue-50' : 'text-brand-red hover:bg-red-50'}`}
-                                            title="Toggle Status"
-                                        >
-                                            {emp.is_active ? <Check size={18} /> : <X size={18} />}
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
+                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Remove Employee</label>
+                            <form onSubmit={handleDeleteEmployee} className="flex gap-2">
+                                <select
+                                    value={selectedDeleteId}
+                                    onChange={e => setSelectedDeleteId(e.target.value)}
+                                    className="flex-1 border border-gray-300 rounded-lg p-3 outline-none focus:border-brand-blue focus:ring-0"
+                                >
+                                    <option value="">Select Employee...</option>
+                                    {employees.map(emp => (
+                                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="submit"
+                                    className="px-4 bg-brand-blue text-white font-bold rounded-lg hover:bg-blue-800 transition flex items-center gap-2"
+                                >
+                                    <X size={18} />
+                                    Remove
+                                </button>
+                            </form>
                         </div>
                     </div>
                 </div>

@@ -55,6 +55,18 @@ export async function addEmployee(name: string) {
     return { success: true };
 }
 
+
+export async function deleteEmployee(id: string) {
+    const supabase = await createSessionClient();
+    const { error } = await supabase
+        .from('employees')
+        .delete()
+        .eq('id', id);
+
+    if (error) throw new Error(error.message);
+    return { success: true };
+}
+
 // --- Report Actions ---
 
 export async function fetchSubmissions(startDate: string, endDate: string) {
