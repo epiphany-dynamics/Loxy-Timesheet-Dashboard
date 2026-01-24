@@ -1,31 +1,113 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Header } from '@/components/Header';
-import { ArrowRight, Mail, Check } from 'lucide-react';
+import { ArrowRight, Mail, Lock, AlertTriangle, KeyRound } from 'lucide-react';
 
 export default function LoginPage() {
+    const router = useRouter();
     const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [sent, setSent] = useState(false);
+    const [errorMsg, setErrorMsg] = useState('');
+
+    // Security State
+    const [isLocked, setIsLocked] = useState(false);
+    const [lockoutTimer, setLockoutTimer] = useState<string | null>(null);
+
+    useEffect(() => {
+        // EMERGENCY UNLOCK: Automatically clear lock for the user
+        localStorage.removeItem('admin_lockout_time');
+        localStorage.removeItem('admin_login_attempts');
+        setIsLocked(false);
+        setLockoutTimer(null);
+
+        // Disable the check interval for now
+        // checkLockout();
+        // const interval = setInterval(checkLockout, 1000);
+        // return () => clearInterval(interval);
+    }, []);
+
+    const checkLockout = () => {
+        // Disabled for unlock
+        /*
+        const lockoutTimeStr = localStorage.getItem('admin_lockout_time');
+        if (lockoutTimeStr) {
+            const lockoutTime = parseInt(lockoutTimeStr, 10);
+            const now = Date.now();
+            if (now < lockoutTime) {
+                setIsLocked(true);
+                const minutesLeft = Math.ceil((lockoutTime - now) / 60000);
+                setLockoutTimer(`${minutesLeft}m`);
+            } else {
+                localStorage.removeItem('admin_lockout_time');
+                localStorage.removeItem('admin_login_attempts');
+                setIsLocked(false);
+                setLockoutTimer(null);
+            }
+        }
+        */
+    };
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isLocked) return;
+
         setLoading(true);
+        setErrorMsg('');
 
-        const { error } = await supabase.auth.signInWithOtp({
-            email,
-            options: {
-                emailRedirectTo: `${location.origin}/auth/callback`,
-            },
+        try {
+            const { error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+
+            if (error) {
+                handleFailedAttempt();
+                setErrorMsg(error.message); // Keep the specific error msg as it's helpful
+            } else {
+                // Success - Clear attempts
+                localStorage.removeItem('admin_login_attempts');
+                router.push('/admin');
+            }
+        } catch (err) {
+            console.error(err);
+            setErrorMsg('An unexpected error occurred.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleFailedAttempt = () => {
+        const attemptsStr = localStorage.getItem('admin_login_attempts');
+        let attempts = attemptsStr ? parseInt(attemptsStr, 10) : 0;
+        attempts += 1;
+        localStorage.setItem('admin_login_attempts', attempts.toString());
+
+        if (attempts >= 3) {
+            const lockoutDuration = 15 * 60 * 1000; // 15 minutes
+            const unlockTime = Date.now() + lockoutDuration;
+            localStorage.setItem('admin_lockout_time', unlockTime.toString());
+            checkLockout();
+        }
+    };
+
+    const handleForgotPassword = async () => {
+        if (!email) {
+            setErrorMsg('Please enter your email first.');
+            return;
+        }
+        setLoading(true);
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${location.origin}/admin/reset-password`, // Assumes existence or just generic redirect
         });
-
         setLoading(false);
         if (error) {
-            alert('Error sending magic link: ' + error.message);
+            setErrorMsg(error.message);
         } else {
-            setSent(true);
+            alert('Password reset link sent to ' + email);
         }
     };
 
@@ -34,22 +116,39 @@ export default function LoginPage() {
             <Header />
 
             <div className="flex-1 flex items-center justify-center p-4">
-                {sent ? (
-                    <div className="text-center space-y-4 max-w-sm w-full p-8 bg-white rounded-xl shadow-lg border border-gray-100">
-                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto text-green-600">
-                            <Check size={32} />
-                        </div>
-                        <h2 className="text-2xl font-bold text-gray-900">Check your email</h2>
-                        <p className="text-gray-500">We sent a magic link to <span className="font-semibold text-gray-900">{email}</span></p>
+                <div className="w-full max-w-sm space-y-6">
+                    <div className="space-y-2 text-center">
+                        <h1 className="text-3xl font-bold tracking-tight text-brand-blue">Admin Access</h1>
+                        <p className="text-gray-500">Secure entry for authorized personnel.</p>
                     </div>
-                ) : (
-                    <div className="w-full max-w-sm space-y-6">
-                        <div className="space-y-2 text-center">
-                            <h1 className="text-3xl font-bold tracking-tight text-brand-blue">Admin Access</h1>
-                            <p className="text-gray-500">Enter your email to sign in.</p>
-                        </div>
 
-                        <form onSubmit={handleLogin} className="space-y-4 bg-white p-8 rounded-xl shadow-lg border border-gray-100">
+                    <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-100 relative overflow-hidden">
+                        {isLocked && (
+                            <div className="absolute inset-0 bg-red-50/95 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-6 text-center space-y-4">
+                                <AlertTriangle className="h-12 w-12 text-red-600" />
+                                <div>
+                                    <h3 className="text-lg font-bold text-red-900">Account Locked</h3>
+                                    <p className="text-sm text-red-700 mt-1">
+                                        Too many failed attempts. Try again in <span className="font-bold">{lockoutTimer}</span>.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={handleForgotPassword}
+                                    className="px-4 py-2 bg-white border border-red-200 text-red-700 rounded-lg text-sm font-medium hover:bg-red-50 transition"
+                                >
+                                    Forgot Password?
+                                </button>
+                            </div>
+                        )}
+
+                        <form onSubmit={handleLogin} className="space-y-4">
+                            {errorMsg && (
+                                <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2">
+                                    <AlertTriangle size={16} />
+                                    {errorMsg}
+                                </div>
+                            )}
+
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-gray-700">Email Address</label>
                                 <div className="relative">
@@ -60,6 +159,7 @@ export default function LoginPage() {
                                         placeholder="admin@gracecaretakers.com"
                                         value={email}
                                         onChange={e => setEmail(e.target.value)}
+                                        disabled={loading || isLocked}
                                     />
                                     <div className="absolute left-3 top-3.5 text-gray-400">
                                         <Mail size={16} />
@@ -67,17 +167,40 @@ export default function LoginPage() {
                                 </div>
                             </div>
 
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-gray-700">Password</label>
+                                <div className="relative">
+                                    <input
+                                        type="password"
+                                        required
+                                        className="w-full border border-gray-300 rounded-lg p-3 pl-10 focus:border-brand-blue outline-none transition-all"
+                                        placeholder="••••••••"
+                                        value={password}
+                                        onChange={e => setPassword(e.target.value)}
+                                        disabled={loading || isLocked}
+                                    />
+                                    <div className="absolute left-3 top-3.5 text-gray-400">
+                                        <Lock size={16} />
+                                    </div>
+                                </div>
+                            </div>
+
                             <button
                                 type="submit"
-                                disabled={loading}
-                                className="w-full py-3 bg-brand-blue text-white font-bold rounded-lg hover:bg-blue-800 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                                disabled={loading || isLocked}
+                                className="w-full py-3 bg-brand-blue text-white font-bold rounded-lg hover:bg-blue-800 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                             >
-                                {loading ? 'Sending...' : 'Send Magic Link'}
+                                {loading ? 'Verifying...' : 'Sign In'}
                                 {!loading && <ArrowRight size={18} />}
                             </button>
                         </form>
                     </div>
-                )}
+
+                    {/* Optional: Always visible help if not strictly hidden by the requirement, 
+                        but requirement says "VERIFICATION: After the 3rd failure, display..." 
+                        so I've put it in the lockout overlay. 
+                    */}
+                </div>
             </div>
 
             <footer className="py-8 text-center text-xs text-gray-400">

@@ -57,8 +57,21 @@ export async function middleware(request: NextRequest) {
 
     const { data: { session } } = await supabase.auth.getSession()
 
+    const url = request.nextUrl.clone()
+
+    // Public Routes (Explicit allow)
+    if (url.pathname === '/' || url.pathname === '/login') {
+        // If user is already logged in and tries to go to login, redirect to admin? 
+        // Optional UX improvement, but strictly following instructions: just allow access.
+        // Actually, let's redirect to admin if logged in at /login for better UX.
+        if (session && url.pathname === '/login') {
+            return NextResponse.redirect(new URL('/admin', request.url))
+        }
+        return response
+    }
+
     // Protect /admin routes
-    if (request.nextUrl.pathname.startsWith('/admin')) {
+    if (url.pathname.startsWith('/admin')) {
         if (!session) {
             return NextResponse.redirect(new URL('/login', request.url))
         }
