@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
-import { getEmployees, toggleEmployeeStatus, addEmployee, fetchSubmissions } from '../actions';
-import { User, FileText, Check, X, Plus, Loader2 } from 'lucide-react';
+import { getEmployees, toggleEmployeeStatus, addEmployee, fetchSubmissions, deleteSubmission } from '../actions';
+import { User, FileText, Check, X, Plus, Loader2, Trash2, LogOut } from 'lucide-react';
 
 type Employee = {
     id: string;
@@ -14,22 +14,38 @@ type Employee = {
 
 export default function AdminPage() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<'employees' | 'reports'>('employees');
 
+    // Data State
     const [employees, setEmployees] = useState<Employee[]>([]);
-    const [newEmployeeName, setNewEmployeeName] = useState('');
-    const [empLoading, setEmpLoading] = useState(true);
+    const [feedData, setFeedData] = useState<any[]>([]);
 
+    // UI State
+    const [empLoading, setEmpLoading] = useState(true);
+    const [feedLoading, setFeedLoading] = useState(true);
+    const [newEmployeeName, setNewEmployeeName] = useState('');
+    const [reportMessage, setReportMessage] = useState('');
+
+    // Default Range: Last 30 Days
     const [dateRange, setDateRange] = useState({
-        start: new Date().toISOString().split('T')[0],
+        start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0],
     });
-    const [reportLoading, setReportLoading] = useState(false);
-    const [reportMessage, setReportMessage] = useState('');
+
+    // Password Change State
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [passLoading, setPassLoading] = useState(false);
+    const [passMessage, setPassMessage] = useState('');
 
     useEffect(() => {
         loadEmployees();
+        loadFeed();
     }, []);
+
+    // Refresh feed when dates change
+    useEffect(() => {
+        loadFeed();
+    }, [dateRange]);
 
     async function loadEmployees() {
         setEmpLoading(true);
@@ -43,81 +59,201 @@ export default function AdminPage() {
         }
     }
 
+    async function loadFeed() {
+        setFeedLoading(true);
+        try {
+            const data = await fetchSubmissions(dateRange.start, dateRange.end);
+            setFeedData(data || []);
+        } catch (e: unknown) {
+            const err = e as Error;
+            if (err.message?.includes('Unauthorized')) router.push('/login');
+            console.error(e);
+        } finally {
+            setFeedLoading(false);
+        }
+    }
+
+    const handleAddEmployee = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newEmployeeName.trim()) return;
+        try {
+            await addEmployee(newEmployeeName);
+            setNewEmployeeName('');
+            loadEmployees();
+        } catch (e: unknown) {
+            alert('Failed to add employee');
+        }
+    };
+
     const handleToggleStatus = async (id: string, currentStatus: boolean) => {
+        // Optimistic update
         setEmployees(prev => prev.map(e => e.id === id ? { ...e, is_active: !currentStatus } : e));
         try {
             await toggleEmployeeStatus(id, !currentStatus);
-        } catch (e) {
+        } catch (e: unknown) {
             alert('Failed to update status');
             loadEmployees();
         }
     };
 
-    const handleAddEmployee = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newEmployeeName.trim()) return;
+    const handleDeleteSubmission = async (id: string) => {
+        if (!confirm('Are you sure you want to delete this submission? This cannot be undone.')) return;
 
         try {
-            await addEmployee(newEmployeeName);
-            setNewEmployeeName('');
-            loadEmployees();
-        } catch (e) {
-            alert('Failed to add employee');
+            await deleteSubmission(id);
+            setFeedData(prev => prev.filter(item => item.id !== id));
+        } catch (e: unknown) {
+            alert('Failed to delete submission');
+        }
+    };
+
+    const handleUpdatePassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setPassMessage('');
+
+        if (newPassword !== confirmPassword) {
+            setPassMessage('Passwords do not match.');
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            setPassMessage('Password must be at least 6 characters.');
+            return;
+        }
+
+        setPassLoading(true);
+        try {
+            // Dynamically import supabase to avoid SSR issues if any, though we are in use client
+            const { supabase } = await import('@/lib/supabase');
+
+            const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+            if (error) {
+                setPassMessage(`Error: ${error.message}`);
+            } else {
+                setPassMessage('Password successfully updated.');
+                setNewPassword('');
+                setConfirmPassword('');
+                // Clear success message after 3 seconds
+                setTimeout(() => setPassMessage(''), 3000);
+            }
+        } catch (err: unknown) {
+            setPassMessage('An unexpected error occurred.');
+            console.error(err);
+        } finally {
+            setPassLoading(false);
         }
     };
 
     const handleGenerateReport = async () => {
-        setReportLoading(true);
-        setReportMessage('');
+        setReportMessage('Generating...');
         try {
+            // Re-fetch to ensure we have fresh data for the report (using current feedData is also an option but fetching is safer for V2 logic consistency if feed is paginated later)
+            // Actually, we can just use feedData if it matches the date range. But let's re-fetch to be safe and reuse the logic.
             const submissions = await fetchSubmissions(dateRange.start, dateRange.end);
 
             if (submissions.length === 0) {
-                setReportMessage('No records found for this period.');
-            } else {
-                const headers = ['Employee', 'Client', 'Date', 'Start', 'End', 'Total Hours', 'Location', 'Services', 'Notes'];
-                const csvRows = [headers.join(',')];
+                setReportMessage('No records found.');
+                setTimeout(() => setReportMessage(''), 3000);
+                return;
+            }
 
-                submissions.forEach((sub: any) => {
-                    const services = Array.isArray(sub.services) ? sub.services.join('; ') : sub.services;
+            // --- V2 Report Logic (Group + Subtotal) ---
+            const groupedData = new Map<string, {
+                name: string;
+                submissions: any[];
+            }>();
+
+            submissions.forEach((sub: any) => {
+                const empName = sub.employees?.name || 'Unknown Employee';
+                if (!groupedData.has(empName)) {
+                    groupedData.set(empName, { name: empName, submissions: [] });
+                }
+                groupedData.get(empName)!.submissions.push(sub);
+            });
+
+            const sortedEmployees = Array.from(groupedData.values())
+                .sort((a, b) => a.name.localeCompare(b.name));
+
+            const headers = ['Employee Name', 'Date', 'Client Name', 'Total Hours', 'Mileage', 'Travel Time', 'Services', 'Notes'];
+            const csvRows = [headers.join(',')];
+
+            sortedEmployees.forEach(emp => {
+                const sortedSubs = emp.submissions.sort((a, b) =>
+                    new Date(a.date_of_service).getTime() - new Date(b.date_of_service).getTime()
+                );
+
+                let subTotalHours = 0;
+                let subTotalMileage = 0;
+                let subTotalTravel = 0;
+
+                sortedSubs.forEach(sub => {
+                    const h = Number(sub.total_hours) || 0;
+                    const m = Number(sub.mileage) || 0;
+                    const t = Number(sub.travel_time) || 0;
+
+                    subTotalHours += h;
+                    subTotalMileage += m;
+                    subTotalTravel += t;
+
+                    const servicesList = Array.isArray(sub.services)
+                        ? sub.services.join('; ')
+                        : (sub.services ? String(sub.services) : '');
+
                     const clean = (text: string) => `"${(text || '').replace(/"/g, '""')}"`;
 
                     const row = [
-                        clean(sub.employees?.name || 'Unknown'),
-                        clean(sub.client_name),
+                        clean(emp.name),
                         sub.date_of_service,
-                        sub.start_time,
-                        sub.end_time,
-                        sub.total_hours,
-                        clean(sub.location),
-                        clean(services),
-                        clean(sub.notes)
+                        clean(sub.client_name),
+                        h.toFixed(2),
+                        m.toFixed(1),
+                        t.toFixed(1),
+                        clean(servicesList),
+                        clean(sub.notes || "N/A")
                     ];
                     csvRows.push(row.join(','));
                 });
 
-                const csvContent = csvRows.join('\n');
-                const blob = new Blob([csvContent], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `Grace_Caretakers_Report_${dateRange.start}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
+                const subRow = [
+                    `"TOTAL ${emp.name.replace(/"/g, '""')}"`,
+                    "", "",
+                    subTotalHours.toFixed(2),
+                    subTotalMileage.toFixed(1),
+                    subTotalTravel.toFixed(1),
+                    "", ""
+                ];
+                csvRows.push(subRow.join(','));
+            });
 
-                setReportMessage(`Success! Downloaded ${submissions.length} records.`);
-            }
-        } catch (e: any) {
-            if (e.message === 'Unauthorized' || e.message.includes('Unauthorized')) {
-                router.push('/login');
-                return;
-            }
-            setReportMessage('Error fetching report data.');
+            const csvContent = csvRows.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Grace_Caretakers_Report_${dateRange.start}_to_${dateRange.end}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+
+            setReportMessage('Success! Report Downloaded.');
+            setTimeout(() => setReportMessage(''), 3000);
+
+        } catch (e) {
             console.error(e);
-        } finally {
-            setReportLoading(false);
+            setReportMessage('Error generating report.');
+        }
+    };
+
+    const handleLogout = async () => {
+        try {
+            const { supabase } = await import('@/lib/supabase');
+            await supabase.auth.signOut();
+            router.push('/login');
+        } catch (error) {
+            console.error('Error signing out:', error);
+            router.push('/login');
         }
     };
 
@@ -125,118 +261,186 @@ export default function AdminPage() {
         <div className="min-h-screen bg-gray-50 text-gray-900 flex flex-col font-sans">
             <Header />
 
-            <div className="flex-1 max-w-4xl w-full mx-auto px-4 py-8">
-                <div className="flex items-center justify-between mb-8">
-                    <h1 className="text-3xl font-bold border-l-4 border-brand-red pl-4 text-brand-blue">Admin Center</h1>
-                </div>
-
-                <div className="flex space-x-4 mb-8 border-b border-gray-200">
+            <div className="flex-1 max-w-6xl w-full mx-auto px-4 py-8 space-y-8">
+                <div className="flex items-center justify-between">
+                    <h1 className="text-3xl font-bold border-l-4 border-brand-red pl-4 text-brand-blue">Admin Dashboard</h1>
                     <button
-                        onClick={() => setActiveTab('employees')}
-                        className={`pb-3 px-4 flex items-center gap-2 font-medium transition-all ${activeTab === 'employees'
-                            ? 'text-brand-blue border-b-2 border-brand-blue'
-                            : 'text-gray-500 hover:text-gray-800'
-                            }`}
+                        onClick={handleLogout}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-200"
                     >
-                        <User size={18} /> Employees
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('reports')}
-                        className={`pb-3 px-4 flex items-center gap-2 font-medium transition-all ${activeTab === 'reports'
-                            ? 'text-brand-blue border-b-2 border-brand-blue'
-                            : 'text-gray-500 hover:text-gray-800'
-                            }`}
-                    >
-                        <FileText size={18} /> Reports
+                        <LogOut size={16} />
+                        Logout
                     </button>
                 </div>
 
-                {activeTab === 'employees' && (
-                    <div className="space-y-6">
-                        <form onSubmit={handleAddEmployee} className="flex gap-2 p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
+                {/* Security Section: Change Password */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 ml-1">
+                    <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <User size={20} className="text-brand-blue" />
+                        Security Settings
+                    </h2>
+
+                    <form onSubmit={handleUpdatePassword} className="flex flex-col md:flex-row gap-4 items-end">
+                        <div className="w-full md:w-auto">
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">New Password</label>
                             <input
-                                type="text"
-                                placeholder="New Employee Name..."
-                                className="flex-1 border border-gray-300 rounded-lg p-3 focus:border-brand-blue outline-none"
-                                value={newEmployeeName}
-                                onChange={e => setNewEmployeeName(e.target.value)}
+                                type="password"
+                                placeholder="New Password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                className="w-full md:w-64 border border-gray-300 rounded-lg p-2 focus:border-brand-blue outline-none"
                             />
-                            <button
-                                type="submit"
-                                className="px-6 bg-brand-blue text-white font-bold rounded-lg hover:bg-blue-800 transition flex items-center gap-2"
-                            >
-                                <Plus size={18} /> Add
-                            </button>
-                        </form>
+                        </div>
+                        <div className="w-full md:w-auto">
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Confirm Password</label>
+                            <input
+                                type="password"
+                                placeholder="Confirm New Password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                className="w-full md:w-64 border border-gray-300 rounded-lg p-2 focus:border-brand-blue outline-none"
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={passLoading}
+                            className="w-full md:w-auto px-6 py-2.5 bg-brand-blue text-white font-bold rounded-lg hover:bg-blue-800 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                            {passLoading ? 'Updating...' : 'Update Password'}
+                        </button>
+                    </form>
+                    {passMessage && (
+                        <div className={`mt-3 text-sm font-medium ${passMessage.includes('Error') || passMessage.includes('match') || passMessage.includes('least') ? 'text-red-600' : 'text-green-600'}`}>
+                            {passMessage}
+                        </div>
+                    )}
+                </div>
 
-                        {empLoading ? (
-                            <div className="flex justify-center p-8"><Loader2 className="animate-spin text-brand-blue" /></div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {employees.map(emp => (
-                                    <div key={emp.id} className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition">
-                                        <span className={emp.is_active ? 'text-gray-900 font-medium' : 'text-gray-400 line-through'}>
-                                            {emp.name}
-                                        </span>
+                {/* Top Section: Employee Manager */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                    <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <User size={20} className="text-brand-blue" />
+                        Employee Manager
+                    </h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Left: Add New */}
+                        <div className="space-y-3">
+                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Add New Employee</label>
+                            <form onSubmit={handleAddEmployee} className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Employee Name..."
+                                    className="flex-1 border border-gray-300 rounded-lg p-3 focus:border-brand-blue outline-none"
+                                    value={newEmployeeName}
+                                    onChange={e => setNewEmployeeName(e.target.value)}
+                                />
+                                <button
+                                    type="submit"
+                                    className="px-4 bg-brand-blue text-white font-bold rounded-lg hover:bg-blue-800 transition flex items-center gap-2"
+                                >
+                                    <Plus size={18} /> Add
+                                </button>
+                            </form>
+                        </div>
+
+                        {/* Right: Manage List */}
+                        <div className="space-y-3">
+                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Active Status ({employees.length})</label>
+                            <div className="bg-gray-50 rounded-lg border border-gray-200 p-2 max-h-32 overflow-y-auto space-y-1">
+                                {empLoading ? <div className="text-center p-2 text-sm text-gray-400">Loading...</div> : employees.map(emp => (
+                                    <div key={emp.id} className="flex items-center justify-between p-2 bg-white rounded border border-gray-100 text-sm">
+                                        <span className={`truncate ${emp.is_active ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{emp.name}</span>
                                         <button
                                             onClick={() => handleToggleStatus(emp.id, emp.is_active)}
-                                            className={`p-2 rounded-full transition-all ${emp.is_active
-                                                ? 'bg-blue-50 text-brand-blue hover:bg-blue-100'
-                                                : 'bg-red-50 text-brand-red hover:bg-red-100'
-                                                }`}
-                                            title={emp.is_active ? "Deactivate" : "Activate"}
+                                            className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded transition-colors ${emp.is_active ? 'text-brand-blue hover:bg-blue-50' : 'text-brand-red hover:bg-red-50'}`}
+                                            title="Toggle Status"
                                         >
-                                            {emp.is_active ? <Check size={16} /> : <X size={16} />}
+                                            {emp.is_active ? <Check size={18} /> : <X size={18} />}
                                         </button>
                                     </div>
                                 ))}
                             </div>
-                        )}
+                        </div>
                     </div>
-                )}
+                </div>
 
-                {activeTab === 'reports' && (
-                    <div className="max-w-lg mx-auto">
-                        <div className="p-6 bg-white rounded-xl border border-gray-200 shadow-sm space-y-6">
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">Start Date</label>
-                                    <input
-                                        type="date"
-                                        className="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-brand-blue"
-                                        value={dateRange.start}
-                                        onChange={e => setDateRange({ ...dateRange, start: e.target.value })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700">End Date</label>
-                                    <input
-                                        type="date"
-                                        className="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-brand-blue"
-                                        value={dateRange.end}
-                                        onChange={e => setDateRange({ ...dateRange, end: e.target.value })}
-                                    />
-                                </div>
+                {/* Main Section: Submissions Feed */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                            <FileText size={20} className="text-brand-blue" />
+                            Submissions Feed
+                        </h2>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-lg border border-gray-200">
+                                <input
+                                    type="date"
+                                    value={dateRange.start}
+                                    onChange={e => setDateRange({ ...dateRange, start: e.target.value })}
+                                    className="bg-transparent text-sm p-1 outline-none text-gray-600"
+                                />
+                                <span className="text-gray-400">-</span>
+                                <input
+                                    type="date"
+                                    value={dateRange.end}
+                                    onChange={e => setDateRange({ ...dateRange, end: e.target.value })}
+                                    className="bg-transparent text-sm p-1 outline-none text-gray-600"
+                                />
                             </div>
 
                             <button
                                 onClick={handleGenerateReport}
-                                disabled={reportLoading}
-                                className="w-full py-4 bg-brand-blue text-white font-bold text-lg rounded-xl hover:bg-blue-800 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                                className="px-4 py-2 bg-white border border-brand-blue text-brand-blue font-bold rounded-lg hover:bg-blue-50 transition text-sm flex items-center gap-2 shadow-sm whitespace-nowrap"
                             >
-                                {reportLoading ? <Loader2 className="animate-spin" /> : <FileText />}
-                                {reportLoading ? 'Generating...' : 'Generate & Download CSV'}
+                                <FileText size={16} />
+                                {reportMessage || 'Export CSV'}
                             </button>
-
-                            {reportMessage && (
-                                <div className={`p-4 rounded-lg text-center text-sm ${reportMessage.includes('Success') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                                    }`}>
-                                    {reportMessage}
-                                </div>
-                            )}
                         </div>
                     </div>
-                )}
+
+                    {/* Feed Table */}
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-gray-50 text-gray-500 font-medium">
+                                <tr>
+                                    <th className="p-3 rounded-tl-lg">Date</th>
+                                    <th className="p-3">Employee</th>
+                                    <th className="p-3">Client</th>
+                                    <th className="p-3 text-right">Hrs</th>
+                                    <th className="p-3 rounded-tr-lg text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {feedLoading ? (
+                                    <tr><td colSpan={5} className="p-8 text-center text-gray-400"><Loader2 className="animate-spin mx-auto" /></td></tr>
+                                ) : feedData.length === 0 ? (
+                                    <tr><td colSpan={5} className="p-8 text-center text-gray-400">No submissions found for this period.</td></tr>
+                                ) : (
+                                    feedData.map(sub => (
+                                        <tr key={sub.id} className="hover:bg-gray-50 transition-colors group">
+                                            <td className="p-3 font-medium text-gray-700">{sub.date_of_service}</td>
+                                            <td className="p-3 text-brand-blue">{sub.employees?.name}</td>
+                                            <td className="p-3 text-gray-600 truncate max-w-[150px]">{sub.client_name}</td>
+                                            <td className="p-3 text-right font-mono text-gray-500">{sub.total_hours?.toFixed(2)}</td>
+                                            <td className="p-3 text-center">
+                                                <button
+                                                    onClick={() => handleDeleteSubmission(sub.id)}
+                                                    className="min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-300 hover:text-red-500 transition-colors rounded hover:bg-red-50"
+                                                    title="Delete Submission"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
             </div>
 
             <footer className="py-8 text-center text-xs text-gray-400">

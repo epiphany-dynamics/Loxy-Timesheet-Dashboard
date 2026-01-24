@@ -77,10 +77,17 @@ export default function TimesheetForm() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Validation
         if (!formData.certification) {
             alert('Please check the certification box.');
             return;
         }
+        if (formData.services.length === 0) {
+            alert('Please select at least one service performed.');
+            return;
+        }
+
         setSubmitting(true);
 
         try {
@@ -187,6 +194,7 @@ export default function TimesheetForm() {
                 <input
                     type="date"
                     required
+                    max={new Date().toISOString().split('T')[0]}
                     className="form-input"
                     value={formData.date_of_service}
                     onChange={e => setFormData({ ...formData, date_of_service: e.target.value })}

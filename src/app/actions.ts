@@ -79,3 +79,20 @@ export async function fetchSubmissions(startDate: string, endDate: string) {
 
     return submissions || [];
 }
+
+export async function deleteSubmission(id: string) {
+    const supabase = await createSessionClient();
+
+    // 1. Verify Auth
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    // 2. Delete
+    const { error } = await supabase
+        .from('submissions')
+        .delete()
+        .eq('id', id);
+
+    if (error) throw new Error(error.message);
+    return { success: true };
+}

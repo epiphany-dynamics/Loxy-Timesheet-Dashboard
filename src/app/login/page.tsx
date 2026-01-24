@@ -16,39 +16,41 @@ export default function LoginPage() {
     // Security State
     const [isLocked, setIsLocked] = useState(false);
     const [lockoutTimer, setLockoutTimer] = useState<string | null>(null);
+    const [failedAttempts, setFailedAttempts] = useState(0);
 
     useEffect(() => {
-        // EMERGENCY UNLOCK: Automatically clear lock for the user
-        localStorage.removeItem('admin_lockout_time');
-        localStorage.removeItem('admin_login_attempts');
-        setIsLocked(false);
-        setLockoutTimer(null);
-
-        // Disable the check interval for now
-        // checkLockout();
-        // const interval = setInterval(checkLockout, 1000);
-        // return () => clearInterval(interval);
+        checkLockout();
+        const interval = setInterval(checkLockout, 1000);
+        return () => clearInterval(interval);
     }, []);
 
     const checkLockout = () => {
-        // Disabled for unlock
-        /*
         const lockoutTimeStr = localStorage.getItem('admin_lockout_time');
+        const attemptsStr = localStorage.getItem('admin_login_attempts');
+        const currentAttempts = attemptsStr ? parseInt(attemptsStr, 10) : 0;
+        setFailedAttempts(currentAttempts);
+
         if (lockoutTimeStr) {
             const lockoutTime = parseInt(lockoutTimeStr, 10);
             const now = Date.now();
+
             if (now < lockoutTime) {
                 setIsLocked(true);
                 const minutesLeft = Math.ceil((lockoutTime - now) / 60000);
                 setLockoutTimer(`${minutesLeft}m`);
             } else {
+                // Lock expired
                 localStorage.removeItem('admin_lockout_time');
                 localStorage.removeItem('admin_login_attempts');
                 setIsLocked(false);
                 setLockoutTimer(null);
+                setFailedAttempts(0);
             }
+        } else {
+            // Use state for immediate UI feedback if not locked yet
+            setIsLocked(false);
+            setLockoutTimer(null);
         }
-        */
     };
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -66,10 +68,11 @@ export default function LoginPage() {
 
             if (error) {
                 handleFailedAttempt();
-                setErrorMsg(error.message); // Keep the specific error msg as it's helpful
+                setErrorMsg(error.message);
             } else {
                 // Success - Clear attempts
                 localStorage.removeItem('admin_login_attempts');
+                localStorage.removeItem('admin_lockout_time');
                 router.push('/admin');
             }
         } catch (err) {
@@ -85,6 +88,7 @@ export default function LoginPage() {
         let attempts = attemptsStr ? parseInt(attemptsStr, 10) : 0;
         attempts += 1;
         localStorage.setItem('admin_login_attempts', attempts.toString());
+        setFailedAttempts(attempts);
 
         if (attempts >= 3) {
             const lockoutDuration = 15 * 60 * 1000; // 15 minutes
@@ -96,12 +100,12 @@ export default function LoginPage() {
 
     const handleForgotPassword = async () => {
         if (!email) {
-            setErrorMsg('Please enter your email first.');
+            setErrorMsg('Please enter your email first to reset password.');
             return;
         }
         setLoading(true);
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${location.origin}/admin/reset-password`, // Assumes existence or just generic redirect
+            redirectTo: `${location.origin}/auth/callback?next=/admin/reset-password`,
         });
         setLoading(false);
         if (error) {
@@ -194,12 +198,13 @@ export default function LoginPage() {
                                 {!loading && <ArrowRight size={18} />}
                             </button>
                         </form>
-                    </div>
 
-                    {/* Optional: Always visible help if not strictly hidden by the requirement, 
-                        but requirement says "VERIFICATION: After the 3rd failure, display..." 
-                        so I've put it in the lockout overlay. 
-                    */}
+                        {(failedAttempts >= 3 || isLocked) && !isLocked && (
+                            <div className="mt-4 text-center">
+                                <button onClick={handleForgotPassword} className="text-sm text-brand-blue hover:underline">Forgot Password?</button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
