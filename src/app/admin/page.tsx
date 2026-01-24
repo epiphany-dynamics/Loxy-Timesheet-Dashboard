@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
-import { getEmployees, toggleEmployeeStatus, addEmployee, fetchSubmissions, deleteSubmission } from '../actions';
-import { User, FileText, Check, X, Plus, Loader2, Trash2, LogOut } from 'lucide-react';
+import { getEmployees, toggleEmployeeStatus, addEmployee, fetchSubmissions } from '../actions';
+import { User, FileText, Check, X, Plus, Loader2, LogOut } from 'lucide-react';
 
 type Employee = {
     id: string;
@@ -93,17 +93,6 @@ export default function AdminPage() {
         } catch (e: unknown) {
             alert('Failed to update status');
             loadEmployees();
-        }
-    };
-
-    const handleDeleteSubmission = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this submission? This cannot be undone.')) return;
-
-        try {
-            await deleteSubmission(id);
-            setFeedData(prev => prev.filter(item => item.id !== id));
-        } catch (e: unknown) {
-            alert('Failed to delete submission');
         }
     };
 
@@ -409,14 +398,15 @@ export default function AdminPage() {
                                     <th className="p-3">Employee</th>
                                     <th className="p-3">Client</th>
                                     <th className="p-3 text-right">Hrs</th>
-                                    <th className="p-3 rounded-tr-lg text-center">Action</th>
+                                    <th className="p-3 text-right">Miles</th>
+                                    <th className="p-3 rounded-tr-lg text-right">Travel</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {feedLoading ? (
-                                    <tr><td colSpan={5} className="p-8 text-center text-gray-400"><Loader2 className="animate-spin mx-auto" /></td></tr>
+                                    <tr><td colSpan={6} className="p-8 text-center text-gray-400"><Loader2 className="animate-spin mx-auto" /></td></tr>
                                 ) : feedData.length === 0 ? (
-                                    <tr><td colSpan={5} className="p-8 text-center text-gray-400">No submissions found for this period.</td></tr>
+                                    <tr><td colSpan={6} className="p-8 text-center text-gray-400">No submissions found for this period.</td></tr>
                                 ) : (
                                     feedData.map(sub => (
                                         <tr key={sub.id} className="hover:bg-gray-50 transition-colors group">
@@ -424,15 +414,8 @@ export default function AdminPage() {
                                             <td className="p-3 text-brand-blue">{sub.employees?.name}</td>
                                             <td className="p-3 text-gray-600 truncate max-w-[150px]">{sub.client_name}</td>
                                             <td className="p-3 text-right font-mono text-gray-500">{sub.total_hours?.toFixed(2)}</td>
-                                            <td className="p-3 text-center">
-                                                <button
-                                                    onClick={() => handleDeleteSubmission(sub.id)}
-                                                    className="min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-300 hover:text-red-500 transition-colors rounded hover:bg-red-50"
-                                                    title="Delete Submission"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            </td>
+                                            <td className="p-3 text-right font-mono text-gray-500">{sub.mileage?.toFixed(1) || '-'}</td>
+                                            <td className="p-3 text-right font-mono text-gray-500">{sub.travel_time?.toFixed(1) || '-'}</td>
                                         </tr>
                                     ))
                                 )}
