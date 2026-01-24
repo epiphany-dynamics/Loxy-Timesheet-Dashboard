@@ -145,8 +145,6 @@ export default function AdminPage() {
     const handleGenerateReport = async () => {
         setReportMessage('Generating...');
         try {
-            // Re-fetch to ensure we have fresh data for the report (using current feedData is also an option but fetching is safer for V2 logic consistency if feed is paginated later)
-            // Actually, we can just use feedData if it matches the date range. But let's re-fetch to be safe and reuse the logic.
             const submissions = await fetchSubmissions(dateRange.start, dateRange.end);
 
             if (submissions.length === 0) {
@@ -172,6 +170,7 @@ export default function AdminPage() {
             const sortedEmployees = Array.from(groupedData.values())
                 .sort((a, b) => a.name.localeCompare(b.name));
 
+            // Columns as requested: Date, Client Name, Total Hours, Mileage, Travel Time, Services, Notes
             const headers = ['Employee Name', 'Date', 'Client Name', 'Total Hours', 'Mileage', 'Travel Time', 'Services', 'Notes'];
             const csvRows = [headers.join(',')];
 
@@ -212,15 +211,21 @@ export default function AdminPage() {
                     csvRows.push(row.join(','));
                 });
 
+                // Subtotal Row
                 const subRow = [
                     `"TOTAL ${emp.name.replace(/"/g, '""')}"`,
-                    "", "",
+                    "", // Date
+                    "", // Client
                     subTotalHours.toFixed(2),
                     subTotalMileage.toFixed(1),
                     subTotalTravel.toFixed(1),
-                    "", ""
+                    "", // Services
+                    ""  // Notes
                 ];
                 csvRows.push(subRow.join(','));
+
+                // Optional: Add empty row for spacing between employees
+                csvRows.push(",,,,,,,");
             });
 
             const csvContent = csvRows.join('\n');
@@ -228,7 +233,7 @@ export default function AdminPage() {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `Grace_Caretakers_Report_${dateRange.start}_to_${dateRange.end}.csv`;
+            a.download = `Grace_Caretakers_Weekly_Report_${dateRange.start}_to_${dateRange.end}.csv`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
