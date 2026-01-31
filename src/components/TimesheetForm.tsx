@@ -41,6 +41,7 @@ export default function TimesheetForm() {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [formKey, setFormKey] = useState(0); // Force form re-render
 
     // Global State
     const [employeeId, setEmployeeId] = useState('');
@@ -82,6 +83,11 @@ export default function TimesheetForm() {
             }
         }
         fetchEmployees();
+
+        // Clear any potential browser cached form data on mount
+        if (formRef.current) {
+            formRef.current.reset();
+        }
     }, []);
 
     // Calculate Hours for a specific entry
@@ -264,6 +270,12 @@ export default function TimesheetForm() {
                     notes: '',
                     services: []
                 }]);
+                // Force form re-render with new key to clear browser cache
+                setFormKey(prev => prev + 1);
+                // Explicitly reset the form element
+                if (formRef.current) {
+                    formRef.current.reset();
+                }
             }, 3000);
 
         } catch (error) {
@@ -296,7 +308,12 @@ export default function TimesheetForm() {
     const getError = (field: string) => errors.find(e => e.field === field)?.message;
 
     return (
-        <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 sm:space-y-8 max-w-5xl mx-auto p-4 sm:p-6 md:p-8 bg-white shadow-lg rounded-2xl">
+        <form
+            key={formKey}
+            ref={formRef}
+            onSubmit={handleSubmit}
+            autoComplete="off"
+            className="space-y-6 sm:space-y-8 max-w-5xl mx-auto p-4 sm:p-6 md:p-8 bg-white shadow-lg rounded-2xl">
 
             {/* Simple Error Banner - Mobile Optimized */}
             {showErrorBanner && errors.length > 0 && (
@@ -336,6 +353,7 @@ export default function TimesheetForm() {
                             <User className="absolute left-3 top-3.5 text-gray-400" size={18} />
                             <select
                                 required
+                                autoComplete="off"
                                 className={`w-full pl-10 pr-4 py-3 bg-white border rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none transition appearance-none ${hasError('employee') ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                                 value={employeeId}
                                 onChange={e => { setEmployeeId(e.target.value); setErrors(prev => prev.filter(err => err.field !== 'employee')); setShowErrorBanner(false); }}
@@ -356,6 +374,7 @@ export default function TimesheetForm() {
                             <Calendar className="absolute left-3 top-3.5 text-gray-400" size={18} />
                             <input
                                 type="date"
+                                autoComplete="off"
                                 className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none transition"
                                 value={weekEnding}
                                 onChange={e => setWeekEnding(e.target.value)}
@@ -397,6 +416,7 @@ export default function TimesheetForm() {
                                 <input
                                     type="text"
                                     required
+                                    autoComplete="off"
                                     className={`w-full p-3 border rounded-lg focus:border-brand-blue focus:ring-2 focus:ring-blue-100 outline-none transition ${hasError(`entry-${entry.id}-client`) ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                                     value={entry.client_name}
                                     onChange={e => { updateEntry(entry.id, 'client_name', e.target.value); setErrors(prev => prev.filter(err => err.field !== `entry-${entry.id}-client`)); setShowErrorBanner(false); }}
@@ -412,6 +432,7 @@ export default function TimesheetForm() {
                                     <input
                                         type="date"
                                         required
+                                        autoComplete="off"
                                         max={new Date().toISOString().split('T')[0]}
                                         className={`w-full p-3 border rounded-lg focus:border-brand-blue focus:ring-2 focus:ring-blue-100 outline-none transition ${hasError(`entry-${entry.id}-date`) ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                                         value={entry.date_of_service}
@@ -424,6 +445,7 @@ export default function TimesheetForm() {
                                     <input
                                         type="text"
                                         required
+                                        autoComplete="off"
                                         className={`w-full p-3 border rounded-lg focus:border-brand-blue focus:ring-2 focus:ring-blue-100 outline-none transition ${hasError(`entry-${entry.id}-location`) ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                                         value={entry.location}
                                         onChange={e => { updateEntry(entry.id, 'location', e.target.value); setErrors(prev => prev.filter(err => err.field !== `entry-${entry.id}-location`)); setShowErrorBanner(false); }}
@@ -442,6 +464,7 @@ export default function TimesheetForm() {
                                         <input
                                             type="time"
                                             required
+                                            autoComplete="off"
                                             className={`w-full p-3 border rounded-lg focus:border-brand-blue outline-none bg-white ${hasError(`entry-${entry.id}-start`) ? 'border-red-500' : 'border-gray-300'}`}
                                             value={entry.start_time}
                                             onChange={e => { updateEntry(entry.id, 'start_time', e.target.value); setErrors(prev => prev.filter(err => err.field !== `entry-${entry.id}-start`)); setShowErrorBanner(false); }}
@@ -453,6 +476,7 @@ export default function TimesheetForm() {
                                         <input
                                             type="time"
                                             required
+                                            autoComplete="off"
                                             className={`w-full p-3 border rounded-lg focus:border-brand-blue outline-none bg-white ${hasError(`entry-${entry.id}-end`) ? 'border-red-500' : 'border-gray-300'}`}
                                             value={entry.end_time}
                                             onChange={e => { updateEntry(entry.id, 'end_time', e.target.value); setErrors(prev => prev.filter(err => err.field !== `entry-${entry.id}-end`)); setShowErrorBanner(false); }}
@@ -475,6 +499,7 @@ export default function TimesheetForm() {
                                     <input
                                         type="number"
                                         step="0.1"
+                                        autoComplete="off"
                                         className="w-full p-3 border border-gray-300 rounded-lg focus:border-brand-blue focus:ring-2 focus:ring-blue-100 outline-none transition"
                                         value={entry.mileage}
                                         onChange={e => updateEntry(entry.id, 'mileage', e.target.value)}
@@ -486,6 +511,7 @@ export default function TimesheetForm() {
                                     <input
                                         type="number"
                                         step="0.1"
+                                        autoComplete="off"
                                         className="w-full p-3 border border-gray-300 rounded-lg focus:border-brand-blue focus:ring-2 focus:ring-blue-100 outline-none transition"
                                         value={entry.travel_time}
                                         onChange={e => updateEntry(entry.id, 'travel_time', e.target.value)}
@@ -521,6 +547,7 @@ export default function TimesheetForm() {
                             <div className="flex flex-col">
                                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Notes / Details</label>
                                 <textarea
+                                    autoComplete="off"
                                     className="w-full p-3 text-sm border border-gray-300 rounded-lg outline-none focus:border-brand-blue focus:ring-2 focus:ring-blue-100 min-h-[80px]"
                                     placeholder="Add any additional details here..."
                                     value={entry.notes}

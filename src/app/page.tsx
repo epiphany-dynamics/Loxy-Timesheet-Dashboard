@@ -1,6 +1,10 @@
 import { Header } from "@/components/Header";
 import TimesheetForm from "@/components/TimesheetForm";
 
+// Disable caching for this page to prevent form data caching issues
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-white">
