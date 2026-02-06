@@ -88,6 +88,9 @@ export default function TimesheetForm() {
         if (formRef.current) {
             formRef.current.reset();
         }
+
+        // Hydration Fix: Ensure we switch to a random ID on the client side immediately
+        setEntries(prev => prev.map(e => e.id === 'initial-entry' ? { ...e, id: crypto.randomUUID() } : e));
     }, []);
 
     // Calculate Hours for a specific entry
