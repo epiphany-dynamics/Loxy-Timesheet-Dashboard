@@ -63,8 +63,8 @@ Deno.serve(async (req) => {
         const sortedEmployees = Array.from(groupedData.values())
             .sort((a, b) => a.name.localeCompare(b.name));
 
-        // Columns as requested: Date, Client Name, Total Hours, Mileage, Travel Time, Services, Notes
-        const headers = ['Employee Name', 'Date', 'Client Name', 'Total Hours', 'Mileage', 'Travel Time', 'Services', 'Notes'];
+        // Columns as requested: Date, Client Name, Total Hours, Pay Rate, Mileage, Services, Notes
+        const headers = ['Employee Name', 'Date', 'Client Name', 'Total Hours', 'Pay Rate', 'Mileage', 'Services', 'Notes'];
         const csvRows = [headers.join(',')];
 
         sortedEmployees.forEach(emp => {
@@ -74,16 +74,13 @@ Deno.serve(async (req) => {
 
             let subTotalHours = 0;
             let subTotalMileage = 0;
-            let subTotalTravel = 0;
 
             sortedSubs.forEach(sub => {
                 const h = Number(sub.total_hours) || 0;
                 const m = Number(sub.mileage) || 0;
-                const t = Number(sub.travel_time) || 0;
 
                 subTotalHours += h;
                 subTotalMileage += m;
-                subTotalTravel += t;
 
                 const servicesList = Array.isArray(sub.services)
                     ? sub.services.join('; ')
@@ -97,8 +94,8 @@ Deno.serve(async (req) => {
                     sub.date_of_service,
                     clean(sub.client_name),
                     h.toFixed(2),
+                    sub.pay_rate ? Number(sub.pay_rate).toFixed(2) : '',
                     m.toFixed(1),
-                    t.toFixed(1),
                     clean(servicesList),
                     clean(sub.notes || "N/A")
                 ];
@@ -111,8 +108,8 @@ Deno.serve(async (req) => {
                 "", // Date
                 "", // Client
                 subTotalHours.toFixed(2),
+                "", // Pay Rate
                 subTotalMileage.toFixed(1),
-                subTotalTravel.toFixed(1),
                 "", // Services
                 ""  // Notes
             ];

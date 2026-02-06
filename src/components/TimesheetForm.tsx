@@ -19,7 +19,7 @@ type TimesheetEntry = {
     total_hours: number;
     location: string;
     mileage: string;
-    travel_time: string;
+    pay_rate: string;
     notes: string;
     services: string[];
 };
@@ -52,7 +52,7 @@ export default function TimesheetForm() {
 
     // Entries State
     const [entries, setEntries] = useState<TimesheetEntry[]>([{
-        id: crypto.randomUUID(),
+        id: 'initial-entry',
         client_name: '',
         date_of_service: new Date().toISOString().split('T')[0],
         start_time: '',
@@ -60,7 +60,7 @@ export default function TimesheetForm() {
         total_hours: 0,
         location: '',
         mileage: '',
-        travel_time: '',
+        pay_rate: '',
         notes: '',
         services: []
     }]);
@@ -100,7 +100,7 @@ export default function TimesheetForm() {
         return parseFloat(diff.toFixed(2));
     };
 
-    const updateEntry = (id: string, field: keyof TimesheetEntry, value: any) => {
+    const updateEntry = (id: string, field: keyof TimesheetEntry, value: string | number | string[]) => {
         setEntries(prev => prev.map(entry => {
             if (entry.id !== id) return entry;
 
@@ -109,8 +109,8 @@ export default function TimesheetForm() {
             // Auto-calc hours if time changes
             if (field === 'start_time' || field === 'end_time') {
                 updated.total_hours = calculateHours(
-                    field === 'start_time' ? value : entry.start_time,
-                    field === 'end_time' ? value : entry.end_time
+                    field === 'start_time' ? (value as string) : entry.start_time,
+                    field === 'end_time' ? (value as string) : entry.end_time
                 );
             }
             return updated;
@@ -138,7 +138,7 @@ export default function TimesheetForm() {
             total_hours: 0,
             location: '',
             mileage: '',
-            travel_time: '',
+            pay_rate: '',
             notes: '',
             services: []
         }]);
@@ -238,7 +238,7 @@ export default function TimesheetForm() {
                 total_hours: entry.total_hours,
                 location: entry.location,
                 mileage: entry.mileage ? parseFloat(entry.mileage) : null,
-                travel_time: entry.travel_time ? parseFloat(entry.travel_time) : null,
+                pay_rate: entry.pay_rate ? parseFloat(entry.pay_rate) : null,
                 notes: entry.notes,
                 services: entry.services,
                 certification: true // Global certification applies to all
@@ -266,7 +266,7 @@ export default function TimesheetForm() {
                     total_hours: 0,
                     location: '',
                     mileage: '',
-                    travel_time: '',
+                    pay_rate: '',
                     notes: '',
                     services: []
                 }]);
@@ -492,8 +492,20 @@ export default function TimesheetForm() {
                                 </div>
                             </div>
 
-                            {/* Row 4: Travel & Mileage */}
+                            {/* Row 4: Pay Rate & Mileage */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="flex flex-col">
+                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Pay Rate ($/hr)</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        autoComplete="off"
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:border-brand-blue focus:ring-2 focus:ring-blue-100 outline-none transition"
+                                        value={entry.pay_rate}
+                                        onChange={e => updateEntry(entry.id, 'pay_rate', e.target.value)}
+                                        placeholder="0.00"
+                                    />
+                                </div>
                                 <div className="flex flex-col">
                                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Mileage (Miles)</label>
                                     <input
@@ -503,18 +515,6 @@ export default function TimesheetForm() {
                                         className="w-full p-3 border border-gray-300 rounded-lg focus:border-brand-blue focus:ring-2 focus:ring-blue-100 outline-none transition"
                                         value={entry.mileage}
                                         onChange={e => updateEntry(entry.id, 'mileage', e.target.value)}
-                                        placeholder="0.0"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Travel Time (Hours)</label>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        autoComplete="off"
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:border-brand-blue focus:ring-2 focus:ring-blue-100 outline-none transition"
-                                        value={entry.travel_time}
-                                        onChange={e => updateEntry(entry.id, 'travel_time', e.target.value)}
                                         placeholder="0.0"
                                     />
                                 </div>
@@ -530,10 +530,10 @@ export default function TimesheetForm() {
                                             type="button"
                                             onClick={() => { toggleService(entry.id, service); setErrors(prev => prev.filter(err => err.field !== `entry-${entry.id}-services`)); setShowErrorBanner(false); }}
                                             className={`px-3 sm:px-4 py-2.5 sm:py-2 rounded-full text-sm font-medium border transition-all shadow-sm min-h-[44px] ${entry.services.includes(service)
-                                                    ? 'bg-brand-blue text-white border-brand-blue ring-2 ring-blue-200'
-                                                    : hasError(`entry-${entry.id}-services`)
-                                                        ? 'bg-white text-red-600 border-red-300 hover:border-red-400 hover:bg-red-50'
-                                                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                                                ? 'bg-brand-blue text-white border-brand-blue ring-2 ring-blue-200'
+                                                : hasError(`entry-${entry.id}-services`)
+                                                    ? 'bg-white text-red-600 border-red-300 hover:border-red-400 hover:bg-red-50'
+                                                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                                                 }`}
                                         >
                                             {service}

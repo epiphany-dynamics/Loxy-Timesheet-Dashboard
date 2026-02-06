@@ -170,8 +170,8 @@ export default function AdminPage() {
             const sortedEmployees = Array.from(groupedData.values())
                 .sort((a, b) => a.name.localeCompare(b.name));
 
-            // Columns as requested: Date, Client Name, Total Hours, Mileage, Travel Time, Services, Notes
-            const headers = ['Employee Name', 'Date', 'Client Name', 'Total Hours', 'Mileage', 'Travel Time', 'Services', 'Notes'];
+            // Columns as requested: Date, Client Name, Total Hours, Pay Rate, Mileage, Services, Notes
+            const headers = ['Employee Name', 'Date', 'Client Name', 'Total Hours', 'Pay Rate', 'Mileage', 'Services', 'Notes'];
             const csvRows = [headers.join(',')];
 
             sortedEmployees.forEach(emp => {
@@ -181,16 +181,13 @@ export default function AdminPage() {
 
                 let subTotalHours = 0;
                 let subTotalMileage = 0;
-                let subTotalTravel = 0;
 
                 sortedSubs.forEach(sub => {
                     const h = Number(sub.total_hours) || 0;
                     const m = Number(sub.mileage) || 0;
-                    const t = Number(sub.travel_time) || 0;
 
                     subTotalHours += h;
                     subTotalMileage += m;
-                    subTotalTravel += t;
 
                     const servicesList = Array.isArray(sub.services)
                         ? sub.services.join('; ')
@@ -203,8 +200,8 @@ export default function AdminPage() {
                         sub.date_of_service,
                         clean(sub.client_name),
                         h.toFixed(2),
+                        sub.pay_rate ? Number(sub.pay_rate).toFixed(2) : '',
                         m.toFixed(1),
-                        t.toFixed(1),
                         clean(servicesList),
                         clean(sub.notes || "N/A")
                     ];
@@ -217,8 +214,8 @@ export default function AdminPage() {
                     "", // Date
                     "", // Client
                     subTotalHours.toFixed(2),
+                    "", // Pay Rate
                     subTotalMileage.toFixed(1),
-                    subTotalTravel.toFixed(1),
                     "", // Services
                     ""  // Notes
                 ];
@@ -416,8 +413,8 @@ export default function AdminPage() {
                                     <th className="p-3">Employee</th>
                                     <th className="p-3">Client</th>
                                     <th className="p-3 text-right">Hrs</th>
-                                    <th className="p-3 text-right">Miles</th>
-                                    <th className="p-3 rounded-tr-lg text-right">Travel</th>
+                                    <th className="p-3 text-right">Rate</th>
+                                    <th className="p-3 rounded-tr-lg text-right">Miles</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -432,8 +429,8 @@ export default function AdminPage() {
                                             <td className="p-3 text-brand-blue">{sub.employees?.name}</td>
                                             <td className="p-3 text-gray-600 truncate max-w-[150px]">{sub.client_name}</td>
                                             <td className="p-3 text-right font-mono text-gray-500">{sub.total_hours?.toFixed(2)}</td>
+                                            <td className="p-3 text-right font-mono text-gray-500">{sub.pay_rate ? `$${Number(sub.pay_rate).toFixed(2)}` : '-'}</td>
                                             <td className="p-3 text-right font-mono text-gray-500">{sub.mileage?.toFixed(1) || '-'}</td>
-                                            <td className="p-3 text-right font-mono text-gray-500">{sub.travel_time?.toFixed(1) || '-'}</td>
                                         </tr>
                                     ))
                                 )}
