@@ -195,6 +195,10 @@ export default function TimesheetForm() {
             if (!entry.location) {
                 newErrors.push({ field: `entry-${entry.id}-location`, message: `Enter the location${entryNum}` });
             }
+            // Verified Mandatory Pay Rate Validation (Feb 11 2026)
+            if (!entry.pay_rate) {
+                newErrors.push({ field: `entry-${entry.id}-payrate`, message: `Enter your pay rate${entryNum}` });
+            }
             if (entry.services.length === 0) {
                 newErrors.push({ field: `entry-${entry.id}-services`, message: `Tap at least one service you performed${entryNum}` });
             }
@@ -497,17 +501,19 @@ export default function TimesheetForm() {
 
                             {/* Row 4: Pay Rate & Mileage */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="flex flex-col">
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Pay Rate ($/hr)</label>
+                                <div className="flex flex-col" data-field={`entry-${entry.id}-payrate`}>
+                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Pay Rate ($/hr) <span className="text-red-500">*</span></label>
                                     <input
                                         type="number"
                                         step="0.01"
+                                        required
                                         autoComplete="off"
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:border-brand-blue focus:ring-2 focus:ring-blue-100 outline-none transition"
+                                        className={`w-full p-3 border rounded-lg focus:border-brand-blue focus:ring-2 focus:ring-blue-100 outline-none transition ${hasError(`entry-${entry.id}-payrate`) ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                                         value={entry.pay_rate}
-                                        onChange={e => updateEntry(entry.id, 'pay_rate', e.target.value)}
+                                        onChange={e => { updateEntry(entry.id, 'pay_rate', e.target.value); setErrors(prev => prev.filter(err => err.field !== `entry-${entry.id}-payrate`)); setShowErrorBanner(false); }}
                                         placeholder="0.00"
                                     />
+                                    {hasError(`entry-${entry.id}-payrate`) && <p className="text-red-500 text-sm mt-1">{getError(`entry-${entry.id}-payrate`)}</p>}
                                 </div>
                                 <div className="flex flex-col">
                                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Mileage (Miles)</label>
