@@ -18,7 +18,6 @@ type TimesheetEntry = {
     end_time: string;
     total_hours: number;
     location: string;
-    mileage: string;
     pay_rate: string;
     notes: string;
     services: string[];
@@ -59,7 +58,6 @@ export default function TimesheetForm() {
         end_time: '',
         total_hours: 0,
         location: '',
-        mileage: '',
         pay_rate: '',
         notes: '',
         services: []
@@ -140,7 +138,6 @@ export default function TimesheetForm() {
             end_time: '',
             total_hours: 0,
             location: '',
-            mileage: '',
             pay_rate: '',
             notes: '',
             services: []
@@ -244,7 +241,6 @@ export default function TimesheetForm() {
                 end_time: entry.end_time,
                 total_hours: entry.total_hours,
                 location: entry.location,
-                mileage: entry.mileage ? parseFloat(entry.mileage) : null,
                 pay_rate: entry.pay_rate ? parseFloat(entry.pay_rate) : null,
                 notes: entry.notes,
                 services: entry.services,
@@ -272,7 +268,6 @@ export default function TimesheetForm() {
                     end_time: '',
                     total_hours: 0,
                     location: '',
-                    mileage: '',
                     pay_rate: '',
                     notes: '',
                     services: []
@@ -499,7 +494,7 @@ export default function TimesheetForm() {
                                 </div>
                             </div>
 
-                            {/* Row 4: Pay Rate & Mileage */}
+                            {/* Row 4: Pay Rate (Mileage Removed) */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="flex flex-col" data-field={`entry-${entry.id}-payrate`}>
                                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Pay Rate ($/hr) <span className="text-red-500">*</span></label>
@@ -514,18 +509,6 @@ export default function TimesheetForm() {
                                         placeholder="0.00"
                                     />
                                     {hasError(`entry-${entry.id}-payrate`) && <p className="text-red-500 text-sm mt-1">{getError(`entry-${entry.id}-payrate`)}</p>}
-                                </div>
-                                <div className="flex flex-col">
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Mileage (Miles)</label>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        autoComplete="off"
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:border-brand-blue focus:ring-2 focus:ring-blue-100 outline-none transition"
-                                        value={entry.mileage}
-                                        onChange={e => updateEntry(entry.id, 'mileage', e.target.value)}
-                                        placeholder="0.0"
-                                    />
                                 </div>
                             </div>
 
