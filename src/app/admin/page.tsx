@@ -170,8 +170,8 @@ export default function AdminPage() {
             const sortedEmployees = Array.from(groupedData.values())
                 .sort((a, b) => a.name.localeCompare(b.name));
 
-            // Columns as requested: Date, Client Name, Total Hours, Pay Rate, Mileage, Services, Notes
-            const headers = ['Employee Name', 'Date', 'Client Name', 'Total Hours', 'Pay Rate', 'Mileage', 'Services', 'Notes'];
+            // Columns: Date, Clock In, Clock Out, Client Name, Total Hours, Pay Rate, Mileage, Services, Notes
+            const headers = ['Employee Name', 'Date', 'Clock In', 'Clock Out', 'Client Name', 'Total Hours', 'Pay Rate', 'Mileage', 'Services', 'Notes'];
             const csvRows = [headers.join(',')];
 
             sortedEmployees.forEach(emp => {
@@ -198,6 +198,8 @@ export default function AdminPage() {
                     const row = [
                         clean(emp.name),
                         sub.date_of_service,
+                        sub.start_time || '',
+                        sub.end_time || '',
                         clean(sub.client_name),
                         h.toFixed(2),
                         sub.pay_rate ? Number(sub.pay_rate).toFixed(2) : '',
@@ -212,6 +214,8 @@ export default function AdminPage() {
                 const subRow = [
                     `"TOTAL ${emp.name.replace(/"/g, '""')}"`,
                     "", // Date
+                    "", // Clock In
+                    "", // Clock Out
                     "", // Client
                     subTotalHours.toFixed(2),
                     "", // Pay Rate
@@ -222,7 +226,7 @@ export default function AdminPage() {
                 csvRows.push(subRow.join(','));
 
                 // Optional: Add empty row for spacing between employees
-                csvRows.push(",,,,,,,");
+                csvRows.push(",,,,,,,,,");
             });
 
             const csvContent = csvRows.join('\n');
